@@ -5,6 +5,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { OAuthModule } from './oauth/oauth.module';
 import { JobsModule } from './jobs/jobs.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AdminModule } from './admin/admin.module';
 import { databaseConfig } from './config/database.config';
 
 @Module({
@@ -14,6 +16,8 @@ import { databaseConfig } from './config/database.config';
     ScheduleModule.forRoot(),
     OAuthModule,
     JobsModule,
+    NotificationsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [],
