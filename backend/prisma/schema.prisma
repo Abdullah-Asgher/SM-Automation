@@ -1,0 +1,109 @@
+// Prisma Schema for ShortSync
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  platformConnections PlatformConnection[]
+  videos              Video[]
+
+  @@map("users")
+}
+
+enum Platform {
+  YOUTUBE
+  TIKTOK
+  INSTAGRAM
+  FACEBOOK
+}
+
+model PlatformConnection {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  platform     Platform
+  accessToken  String   @map("access_token")
+  refreshToken String?  @map("refresh_token")
+  tokenExpiry  DateTime? @map("token_expiry")
+  isActive     Boolean  @default(true) @map("is_active")
+  connectedAt  DateTime @default(now()) @map("connected_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@map("platform_connections")
+}
+
+model Video {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  title         String
+  description   String   @db.Text
+  filePath      String   @map("file_path")
+  thumbnailPath String?  @map("thumbnail_path")
+  duration      Int      // in seconds
+  fileSize      BigInt   @map("file_size") // in bytes
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts VideoPost[]
+
+  @@map("videos")
+}
+
+enum PostStatus {
+  PENDING
+  SCHEDULED
+  POSTING
+  POSTED
+  FAILED
+}
+
+model VideoPost {
+  id                         String     @id @default(uuid())
+  videoId                    String     @map("video_id")
+  platform                   Platform
+  platformSpecificTitle      String?    @map("platform_specific_title")
+  platformSpecificDescription String?   @db.Text @map("platform_specific_description")
+  platformSpecificHashtags   String[]   @map("platform_specific_hashtags")
+  scheduledTime              DateTime?  @map("scheduled_time")
+  postedAt                   DateTime?  @map("posted_at")
+  status                     PostStatus @default(PENDING)
+  platformPostId             String?    @map("platform_post_id")
+  errorMessage               String?    @db.Text @map("error_message")
+  retryCount                 Int        @default(0) @map("retry_count")
+  createdAt                  DateTime   @default(now()) @map("created_at")
+
+  video     Video              @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  analytics PostingAnalytics?
+
+  @@index([status])
+  @@index([scheduledTime])
+  @@map("video_posts")
+}
+
+model PostingAnalytics {
+  id          String   @id @default(uuid())
+  videoPostId String   @unique @map("video_post_id")
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
+  lastSynced  DateTime @default(now()) @map("last_synced")
+
+  videoPost VideoPost @relation(fields: [videoPostId], references: [id], onDelete: Cascade)
+
+  @@map("posting_analytics")
+}
