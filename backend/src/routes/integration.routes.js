@@ -34,6 +34,26 @@ router.get('/', authenticate, async (req, res, next) => {
             },
         });
 
+        // Add Facebook/Instagram as connected if access token exists in env
+        const hasAccessToken = !!process.env.FACEBOOK_ACCESS_TOKEN;
+
+        if (hasAccessToken) {
+            const platformsToAdd = ['FACEBOOK', 'INSTAGRAM'];
+
+            for (const platform of platformsToAdd) {
+                const existingConnection = connections.find(c => c.platform === platform);
+
+                if (!existingConnection) {
+                    connections.push({
+                        id: `env-${platform.toLowerCase()}`,
+                        platform,
+                        isActive: true,
+                        connectedAt: new Date(),
+                    });
+                }
+            }
+        }
+
         res.json(connections);
     } catch (error) {
         next(error);
@@ -72,10 +92,19 @@ router.get('/tiktok/callback', async (req, res, next) => {
     }
 });
 
-// Instagram OAuth
+// Instagram - Simplified (uses Facebook access token)
 router.get('/instagram/connect', authenticate, (req, res) => {
-    const authUrl = getInstagramAuthUrl(req.userId);
-    res.json({ authUrl });
+    // For personal use, Instagram uses the same Facebook access token
+    if (process.env.FACEBOOK_ACCESS_TOKEN) {
+        res.json({
+            success: true,
+            message: 'Instagram connected via Facebook access token'
+        });
+    } else {
+        res.status(400).json({
+            error: 'Facebook access token not configured. Add FACEBOOK_ACCESS_TOKEN to .env'
+        });
+    }
 });
 
 router.get('/instagram/callback', async (req, res, next) => {
@@ -88,10 +117,19 @@ router.get('/instagram/callback', async (req, res, next) => {
     }
 });
 
-// Facebook OAuth
+// Facebook - Simplified (uses access token from env)
 router.get('/facebook/connect', authenticate, (req, res) => {
-    const authUrl = getFacebookAuthUrl(req.userId);
-    res.json({ authUrl });
+    // For personal use, use the access token from .env
+    if (process.env.FACEBOOK_ACCESS_TOKEN) {
+        res.json({
+            success: true,
+            message: 'Facebook connected via access token'
+        });
+    } else {
+        res.status(400).json({
+            error: 'Facebook access token not configured. Add FACEBOOK_ACCESS_TOKEN to .env'
+        });
+    }
 });
 
 router.get('/facebook/callback', async (req, res, next) => {

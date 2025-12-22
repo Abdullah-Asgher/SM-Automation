@@ -71,44 +71,16 @@ export async function handleInstagramCallback(code, userId) {
     return { access_token: longLivedToken };
 }
 
-// Get access token
+// Get access token - use direct token from env for personal use
 async function getAccessToken(userId) {
-    const connection = await prisma.platformConnection.findUnique({
-        where: {
-            userId_platform: {
-                userId,
-                platform: 'INSTAGRAM',
-            },
-        },
-    });
+    // For personal automation, use the access token from .env
+    const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
 
-    if (!connection) {
-        throw new Error('Instagram not connected');
+    if (!accessToken) {
+        throw new Error('Facebook/Instagram access token not configured in .env');
     }
 
-    // Refresh long-lived token if needed (refresh before expiry)
-    if (connection.tokenExpiry && new Date() > new Date(connection.tokenExpiry.getTime() - 7 * 24 * 60 * 60 * 1000)) {
-        const response = await axios.get(`${INSTAGRAM_GRAPH_URL}/refresh_access_token`, {
-            params: {
-                grant_type: 'ig_refresh_token',
-                access_token: connection.accessToken,
-            },
-        });
-
-        const { access_token, expires_in } = response.data;
-
-        await prisma.platformConnection.update({
-            where: { id: connection.id },
-            data: {
-                accessToken: access_token,
-                tokenExpiry: new Date(Date.now() + expires_in * 1000),
-            },
-        });
-
-        return access_token;
-    }
-
-    return connection.accessToken;
+    return accessToken;
 }
 
 // Get Instagram account ID
@@ -129,11 +101,17 @@ export async function uploadToInstagram(userId, videoPath, metadata) {
     const accountId = await getInstagramAccountId(accessToken);
 
     const { title, description, hashtags = [] } = metadata;
+
+    // Construct caption
     const caption = `${description}\n\n${hashtags.join(' ')}`;
 
-    // Note: Instagram requires the video to be hosted publicly
-    // For production, you'd upload to a CDN first
-    // For now, this is a placeholder showing the API structure
+    // Get public video URL via ngrok
+    const ngrokUrl = process.env.NGROK_PUBLIC_URL || 'http://localhost:3000';
+    const videoFilename = videoPath.split(/[\\\/]/).pop();
+    const publicVideoUrl = `${ngrokUrl}/uploads/${videoFilename}`;
+
+    console.log('📸 Instagram Upload:', videoFilename);
+    console.log('   Public URL:', publicVideoUrl);
 
     // Step 1: Create media container
     const containerResponse = await axios.post(
@@ -141,7 +119,7 @@ export async function uploadToInstagram(userId, videoPath, metadata) {
         null,
         {
             params: {
-                video_url: 'YOUR_PUBLIC_VIDEO_URL', // Would be CDN URL
+                video_url: publicVideoUrl,
                 media_type: 'REELS',
                 caption,
                 access_token: accessToken,

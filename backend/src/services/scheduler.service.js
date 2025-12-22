@@ -98,10 +98,9 @@ export async function schedulePost(postId, mode) {
         const delayMinutes = getRandomDelay();
         scheduledTime = new Date(Date.now() + delayMinutes * 60 * 1000);
     } else {
-        // Manual scheduled time provided
+        // Manual scheduled time provided - use EXACT time selected by user
         scheduledTime = new Date(mode);
-        // Add slight variance to make it look human
-        scheduledTime = addTimeVariance(scheduledTime);
+        // NOTE: No time variance added for manual scheduling to respect user's exact choice
     }
 
     // Check if allowed to post
@@ -131,8 +130,12 @@ export async function schedulePost(postId, mode) {
         },
     });
 
+    console.log(`📅 Scheduling post ${postId} for ${scheduledTime}`);
+    console.log(`   Platform: ${post.platform}`);
+    console.log(`   Delay: ${scheduledTime.getTime() - Date.now()}ms`);
+
     // Add to queue
-    await uploadQueue.add(
+    const job = await uploadQueue.add(
         { postId },
         {
             delay: scheduledTime.getTime() - Date.now(),
@@ -143,6 +146,8 @@ export async function schedulePost(postId, mode) {
             },
         }
     );
+
+    console.log(`✅ Job ${job.id} added to queue`);
 
     return scheduledTime;
 }
