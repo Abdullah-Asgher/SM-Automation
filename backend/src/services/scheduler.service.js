@@ -22,6 +22,24 @@ const uploadQueue = new Bull('video-uploads', {
     },
 });
 
+console.log('📋 Bull upload queue initialized');
+
+uploadQueue.on('ready', () => {
+    console.log('✅ Upload queue connected to Redis and ready!');
+});
+
+uploadQueue.on('error', (error) => {
+    console.error('❌ Upload queue error:', error.message);
+});
+
+redis.on('connect', () => {
+    console.log('✅ Redis connected!');
+});
+
+redis.on('error', (error) => {
+    console.error('❌ Redis error:', error.message);
+});
+
 // Humanization utilities
 const PLATFORM_LIMITS = {
     YOUTUBE: parseInt(process.env.YOUTUBE_DAILY_LIMIT) || 5,
@@ -272,6 +290,20 @@ uploadQueue.process(async (job) => {
         return { success: true, platformPostId: result.id };
     } catch (error) {
         console.error('Upload failed:', error);
+
+        // Write full error to file for inspection
+        const fs = require('fs');
+        const errorLog = {
+            timestamp: new Date().toISOString(),
+            platform: post.platform,
+            videoPath: post.video.filePath,
+            error: {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+            }
+        };
+        fs.appendFileSync('upload-errors.log', JSON.stringify(errorLog, null, 2) + '\n---\n');
 
         // Update post as failed
         await prisma.videoPost.update({

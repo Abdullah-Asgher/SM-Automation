@@ -83,22 +83,45 @@ async function getAccessToken(userId) {
     return accessToken;
 }
 
-// Get Instagram account ID
+// Get Instagram account ID and Page Access Token
 async function getInstagramAccountId(accessToken) {
-    const response = await axios.get(`${INSTAGRAM_GRAPH_URL}/me`, {
+    // First, get the Facebook Page
+    const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
         params: {
-            fields: 'id,username',
             access_token: accessToken,
         },
     });
 
-    return response.data.id;
+    if (pagesResponse.data.data.length === 0) {
+        throw new Error('No Facebook pages found');
+    }
+
+    // Use first page
+    const page = pagesResponse.data.data[0];
+
+    // Get Instagram Business Account connected to the page
+    const igResponse = await axios.get(`https://graph.facebook.com/v18.0/${page.id}`, {
+        params: {
+            fields: 'instagram_business_account',
+            access_token: page.access_token,
+        },
+    });
+
+    if (!igResponse.data.instagram_business_account) {
+        throw new Error('No Instagram Business Account connected to Facebook Page. Please connect your Instagram Business account to your Facebook Page.');
+    }
+
+    // Return BOTH the IG account ID AND the Page Access Token
+    return {
+        accountId: igResponse.data.instagram_business_account.id,
+        pageAccessToken: page.access_token
+    };
 }
 
 // Upload video as Reel
 export async function uploadToInstagram(userId, videoPath, metadata) {
-    const accessToken = await getAccessToken(userId);
-    const accountId = await getInstagramAccountId(accessToken);
+    const userAccessToken = await getAccessToken(userId);
+    const { accountId, pageAccessToken } = await getInstagramAccountId(userAccessToken);
 
     const { title, description, hashtags = [] } = metadata;
 
@@ -112,39 +135,54 @@ export async function uploadToInstagram(userId, videoPath, metadata) {
 
     console.log('📸 Instagram Upload:', videoFilename);
     console.log('   Public URL:', publicVideoUrl);
+    console.log('   IG Account ID:', accountId);
 
-    // Step 1: Create media container
-    const containerResponse = await axios.post(
-        `${INSTAGRAM_GRAPH_URL}/${accountId}/media`,
-        null,
-        {
-            params: {
-                video_url: publicVideoUrl,
-                media_type: 'REELS',
-                caption,
-                access_token: accessToken,
-            },
+    try {
+        // Step 1: Create media container
+        console.log('   Step 1: Creating media container...');
+        const containerResponse = await axios.post(
+            `${INSTAGRAM_GRAPH_URL}/${accountId}/media`,
+            null,
+            {
+                params: {
+                    video_url: publicVideoUrl,
+                    media_type: 'REELS',
+                    caption,
+                    access_token: pageAccessToken,
+                },
+            }
+        );
+
+        const containerId = containerResponse.data.id;
+        console.log('   ✅ Container created:', containerId);
+
+        // Step 2: Publish media
+        console.log('   Step 2: Publishing media...');
+        const publishResponse = await axios.post(
+            `${INSTAGRAM_GRAPH_URL}/${accountId}/media_publish`,
+            null,
+            {
+                params: {
+                    creation_id: containerId,
+                    access_token: pageAccessToken,
+                },
+            }
+        );
+
+        console.log('   ✅ Published successfully!');
+        return {
+            id: publishResponse.data.id,
+            url: null,
+        };
+    } catch (error) {
+        console.error('❌ Instagram Upload Error:');
+        console.error('   Error message:', error.message);
+        if (error.response) {
+            console.error('   Status:', error.response.status);
+            console.error('   Data:', JSON.stringify(error.response.data, null, 2));
         }
-    );
-
-    const containerId = containerResponse.data.id;
-
-    // Step 2: Publish media
-    const publishResponse = await axios.post(
-        `${INSTAGRAM_GRAPH_URL}/${accountId}/media_publish`,
-        null,
-        {
-            params: {
-                creation_id: containerId,
-                access_token: accessToken,
-            },
-        }
-    );
-
-    return {
-        id: publishResponse.data.id,
-        url: null,
-    };
+        throw error;
+    }
 }
 
 // Get Reel insights
